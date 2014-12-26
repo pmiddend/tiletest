@@ -8,13 +8,15 @@ import           Control.Lens        (each, (%~), (&),
 import           Control.Lens.At     (ix)
 import           Control.Lens.TH     (makeLenses)
 import           Data.Array          (Array, array, bounds)
+import TileTest.TrackGenerator
+import Control.Monad(mapM_)
 import           Data.List           (nub)
 import           Data.Monoid         ((<>))
 import           Linear.V2
-import           Wrench.Angular
-import           Wrench.Color
-import           Wrench.Engine       (Picture (..), RenderPositionMode (..),
-                                      wrenchPlay)
+-- import           Wrench.Angular
+-- import           Wrench.Color
+-- import           Wrench.Engine       (Picture (..), RenderPositionMode (..),
+--                                       wrenchPlay)
 
 data TileType = Grass | Dirt deriving(Eq,Show)
 
@@ -93,14 +95,22 @@ pixelToTileProto (Juicy.PixelRGB8{}) = TileProto Grass False
 
 -- viewportSize = V2 640 480
 
+-- testArray = array ((0,0),(3,3)) [((x,y),True) | x <- [0..3],y <- [0..3]]
+-- testArray = array ((0,0),(3,3)) [((x,y),True) | x <- [0..3],y <- [0]]
+
 main :: IO ()
 main = do
-  imageReadResult <- Juicy.readImage "media/track.png"
---   return ()
-  case imageReadResult of
-    Left errmsg -> error errmsg
-    Right (Juicy.ImageRGB8 omg) -> print $ Juicy.pixelAt omg 7 7
-    Right _ -> print "oh no"
+--   print testArray
+--   print $ toBooleanList testArray
+  let a = [(0,0),(1,0),(2,0),(2,1),(2,2),(1,2),(0,2),(0,1)]
+  mapM_ putStrLn $ map showTrack $ generateTracks (neighborsFromArray a) (head a)
+
+--   imageReadResult <- Juicy.readImage "media/track.png"
+-- --   return ()
+--   case imageReadResult of
+--     Left errmsg -> error errmsg
+--     Right (Juicy.ImageRGB8 omg) -> print $ Juicy.pixelAt omg 7 7
+--     Right _ -> print "oh no"
 
   {-do
   wrenchPlay
