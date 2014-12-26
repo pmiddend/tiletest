@@ -103,7 +103,8 @@ main = do
 --   print testArray
 --   print $ toBooleanList testArray
   let a = [(0,0),(1,0),(2,0),(2,1),(2,2),(1,2),(0,2),(0,1)]
-  mapM_ putStrLn $ map showTrack $ generateTracks (neighborsFromArray a) (head a)
+  print (generateTracks (neighborsFromArray a) (head a))
+--   mapM_ putStrLn $ map showTrack $ generateTracks (neighborsFromArray a) (head a)
 
 --   imageReadResult <- Juicy.readImage "media/track.png"
 -- --   return ()
