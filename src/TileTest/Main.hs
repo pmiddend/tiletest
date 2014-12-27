@@ -98,12 +98,14 @@ pixelToTileProto (Juicy.PixelRGB8{}) = TileProto Grass False
 -- testArray = array ((0,0),(3,3)) [((x,y),True) | x <- [0..3],y <- [0..3]]
 -- testArray = array ((0,0),(3,3)) [((x,y),True) | x <- [0..3],y <- [0]]
 
+
+
 main :: IO ()
 main = do
 --   print testArray
 --   print $ toBooleanList testArray
   let a = [(0,0),(1,0),(2,0),(2,1),(2,2),(1,2),(0,2),(0,1)]
-  print (generateTracks (neighborsFromArray a) (head a))
+  putStrLn (showTree (generateTracks (neighborsFromArray a) (head a)))
 --   mapM_ putStrLn $ map showTrack $ generateTracks (neighborsFromArray a) (head a)
 
 --   imageReadResult <- Juicy.readImage "media/track.png"
