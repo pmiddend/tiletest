@@ -21,7 +21,7 @@ executable tiletest
   -- other-extensions:
   hs-source-dirs: src
   build-depends:       base >=4.7 && <4.8
---                     , wrench
+                     , wrench
                      , lens
                      , linear
                      , JuicyPixels
