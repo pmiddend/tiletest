@@ -2,24 +2,25 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
 
-import qualified Codec.Picture       as Juicy
-import           Control.Lens        (each, (%~), (&),
-                                      (^.), (^..), (^?!), _1, _2,from,both,toListOf,over,at)
-import           Control.Lens.At     (ix)
-import           Control.Lens.TH     (makeLenses)
-import           Data.Array          (Array, array)
-import TileTest.TrackGenerator
-import Control.Monad(mapM_)
-import           Data.List           (nub,intercalate,maximumBy)
-import           Data.Monoid         ((<>))
-import Data.Array((!))
+import qualified Codec.Picture           as Juicy
+import           Control.Lens            (at, both, each, from, over, toListOf,
+                                          (%~), (&), (^.), (^..), (^?!), _1, _2)
+import           Control.Lens.At         (ix)
+import           Control.Lens.TH         (makeLenses)
+import           Control.Monad           (mapM_)
+import           Data.Array              (Array, array,(!))
+import           Data.List               (intercalate, maximumBy, nub)
+import Data.Ord(comparing)
+import           Data.Monoid             ((<>))
 import           Linear.V2
-import Text.Printf(printf)
+import           Text.Printf             (printf)
+import           TileTest.TrackGenerator
 import           Wrench.Angular
 import           Wrench.Color
+import           Wrench.Engine           (Picture (..), RenderPositionMode (..),
+                                          SpriteIdentifier, wrenchPlay)
+import           Wrench.FloatType
 import           Wrench.Rectangle
-import           Wrench.Engine       (Picture (..), RenderPositionMode (..), wrenchPlay, SpriteIdentifier)
-import Wrench.FloatType
 
 data TileType = Grass | Dirt deriving(Eq,Show)
 
@@ -45,7 +46,7 @@ type Image a = TileIndex -> a
 
 data BoundedImage a = BoundedImage {
     _imageData :: Image a
-  , _bounds :: TileIndex
+  , _bounds    :: TileIndex
   }
 
 $(makeLenses ''BoundedImage)
@@ -53,15 +54,15 @@ $(makeLenses ''BoundedImage)
 instance Functor BoundedImage where
   fmap f (BoundedImage d b) = BoundedImage (f . d) b
 
-imageValues :: BoundedImage a => [a]
-imageValues (BoundedImage d b) = [d i | i <- (x,y), x <- [0..b ^. _1], y <- [0..b ^. _2]]
+imageValues :: BoundedImage a -> [a]
+imageValues (BoundedImage d b) = [d (x,y) | x <- [0..b ^. _1], y <- [0..b ^. _2]]
 
 instance Show a => Show (BoundedImage a) where
-  show (BoundedImage d b) =
-    let maxl = (maximumBy (length . show) . imageValues) b
+  show bi@(BoundedImage d b) =
+    let maxl = (maximumBy (comparing (length . show)) . imageValues) bi
         pfs = "% " <> show maxl <> "d"
-        ls = [[printf pfs (d (x,y)) | x <- [(minIndices ^. _1)..(maxIndices ^. _1)]] | y <- [(minIndices ^. _2)..(maxIndices ^. _2)]]
-    in unlines ls
+        ls = [[printf pfs (show (d (x,y))) | x <- [0..(b ^. _1)]] | y <- [0..(b ^. _2)]]
+    in unlines . map concat $ ls
 
 type IndexAndNeighbors = (TileIndex,TileIndex,TileIndex,TileIndex)
 
@@ -173,7 +174,9 @@ main = do
 -- --   return ()
   case imageReadResult of
      Left errmsg -> error errmsg
-     Right (Juicy.ImageRGB8 omg) -> print $ imageToPixelArray omg
+     Right (Juicy.ImageRGB8 omg) -> do
+      let pixelArray = imageToPixelArray omg
+      print pixelArray
      Right _ -> print "oh no"
 
   --print (tilesToPicture (rectangleFromPoints (V2 0 0) (V2 192 192)) (\_ -> Tile (Grass,Grass,Dirt,Dirt) (Grass,Dirt)) 96)
