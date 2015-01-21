@@ -4,12 +4,13 @@ module Main where
 
 import qualified Codec.Picture           as Juicy
 import           Control.Lens            (at, both, each, from, over, toListOf,
-                                          (%~), (&), (^.), (^..), (^?!), _1, _2)
+                                          (%~), (&), (^.), (^..), (^?!), _1, _2,_3,_4)
 import           Control.Lens.At         (ix)
 import           Control.Lens.TH         (makeLenses)
 import           Control.Monad           (mapM_)
+import Data.Traversable(traverse)
 import           Data.Array              (Array, array,(!))
-import           Data.List               (intercalate, maximumBy, nub)
+import           Data.List               (intercalate, maximumBy, nub,sort)
 import Data.Ord(comparing)
 import           Data.Monoid             ((<>))
 import           Linear.V2
@@ -21,6 +22,8 @@ import           Wrench.Engine           (Picture (..), RenderPositionMode (..),
                                           SpriteIdentifier, wrenchPlay)
 import           Wrench.FloatType
 import           Wrench.Rectangle
+import Control.Applicative
+import Data.Bool.Extras(bool)
 
 data TileType = Grass | Dirt deriving(Eq,Show)
 
@@ -31,6 +34,9 @@ data TileProto = TileProto {
 
 $(makeLenses ''TileProto)
 
+instance Show TileProto where
+  show tp = [bool ' ' 'T' (tp ^. tileProtoTrack),bool 'G' 'D' (tp ^. tileProtoType == Dirt)]
+
 type TileId = (TileType,TileType)
 
 data Tile = Tile {
@@ -39,6 +45,12 @@ data Tile = Tile {
   }
 
 $(makeLenses ''Tile)
+
+instance Show Tile where
+  show t = [showTile (t ^. (tileNeighbors . _1)),showTile (t ^. (tileNeighbors . _2)),showTile (t ^. (tileNeighbors . _3)),showTile (t ^. (tileNeighbors . _4))]
+--    show t = (t ^. tileNeighbors) & each %~ showTile
+    where showTile Grass = 'G'
+          showTile Dirt = 'D'
 
 type TileIndex = (Int,Int)
 
@@ -59,9 +71,10 @@ imageValues (BoundedImage d b) = [d (x,y) | x <- [0..b ^. _1], y <- [0..b ^. _2]
 
 instance Show a => Show (BoundedImage a) where
   show bi@(BoundedImage d b) =
-    let maxl = (maximumBy (comparing (length . show)) . imageValues) bi
-        pfs = "% " <> show maxl <> "d"
+    let maxl = (maximum . map (length . show) . imageValues) bi
+        pfs = "% " <> show (maxl + 1) <> "s"
         ls = [[printf pfs (show (d (x,y))) | x <- [0..(b ^. _1)]] | y <- [0..(b ^. _2)]]
+--     in show maxl
     in unlines . map concat $ ls
 
 type IndexAndNeighbors = (TileIndex,TileIndex,TileIndex,TileIndex)
@@ -87,7 +100,7 @@ $(makeLenses ''Terrain)
 imageToPixelArray :: Juicy.Image Juicy.PixelRGB8 -> PixelArray
 imageToPixelArray im = BoundedImage {
     _imageData = uncurry (Juicy.pixelAt im)
-  , _bounds = (Juicy.imageWidth im,Juicy.imageHeight im)
+  , _bounds = (Juicy.imageWidth im-1,Juicy.imageHeight im-1)
   }
 
 {-
@@ -121,7 +134,7 @@ protoToTile ns = Tile {
 -- TODO: Das sieht nach Komonaden aus (focusedimage mit neighbor-Funktion)
 tileProtoToTileArray :: TileProtoArray -> TileArray
 tileProtoToTileArray a = let newBounds = over each (\c -> c - 1) (a ^. bounds)
-                             newValues (x,y) = protoToTile (generateNeighborhood (x,y) & each %~ (\i -> ((a ^. imageData) i) ^. tileProtoType))
+                             newValues (x,y) = protoToTile (generateNeighborhood (x,y) & each %~ (\i -> (a ^. imageData) i ^. tileProtoType))
                          in BoundedImage newValues newBounds
 
 tileProtoToTrack :: TileProtoArray -> Track
@@ -146,7 +159,7 @@ shortTileType Dirt = "d"
 --type TileSearchFunction = Rectangle -> []
 spriteIdentifierForTile :: Tile -> SpriteIdentifier
 --spriteIdentifierForTile t = map show ((t ^. tileId)^..both)
-spriteIdentifierForTile t = concat (map shortTileType (t ^.. tileId.each)) <> "_" <> (concatMap shortTileType (t ^.. tileNeighbors. each))
+spriteIdentifierForTile t = concatMap shortTileType (t ^.. tileId.each) <> "_" <> concatMap shortTileType (t ^.. tileNeighbors. each)
 
 {-
  - Zuweisung einer absoluten Position zu jedem Tile (tileindex_xy*tilesize) (ist ja immer berechenbar, also als Funktion modellieren)
@@ -162,38 +175,30 @@ tilesToPicture viewport ts tileSize =
       positionForIndex (x,y) = (V2 (fromIntegral x * tileSize) (fromIntegral y * tileSize)) - (viewport ^. rectLeftTop)
   in Pictures $ map (\(x,y) -> Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile (ts (x,y))) RenderPositionTopLeft)) indices
 
+getRed :: Juicy.PixelRGB8 -> Juicy.Pixel8
+getRed (Juicy.PixelRGB8 r _ _) = r
+
 main :: IO ()
 main = do
---   print testArray
---   print $ toBooleanList testArray
---  let a = [(0,0),(1,0),(2,0),(2,1),(2,2),(1,2),(0,2),(0,1)]
---  putStrLn (showTree (generateTracks (neighborsFromArray a) (head a)))
---   mapM_ putStrLn $ map showTrack $ generateTracks (neighborsFromArray a) (head a)
-
-  imageReadResult <- Juicy.readImage "media/track.png"
--- --   return ()
+  imageReadResult <- Juicy.readImage "media/track2.png"
   case imageReadResult of
      Left errmsg -> error errmsg
      Right (Juicy.ImageRGB8 omg) -> do
       let pixelArray = imageToPixelArray omg
-      print pixelArray
+      let tileProtoArray = pixelToTileProtoArray pixelArray
+      let tileArray = tileProtoToTileArray tileProtoArray
+      let viewport = V2 640 480
+      print tileArray
+      wrenchPlay
+        "window title"
+        viewport
+        "media"
+        colorsWhite
+        tileArray
+        1
+        (\tiles -> tilesToPicture (rectangleFromPoints (V2 0 0) viewport) (tiles ^. imageData) 96)
+        (\_ w -> w)
+        (\_ w -> w)
      Right _ -> print "oh no"
 
-  --print (tilesToPicture (rectangleFromPoints (V2 0 0) (V2 192 192)) (\_ -> Tile (Grass,Grass,Dirt,Dirt) (Grass,Dirt)) 96)
-  {-
-  let nh = (Grass,Grass,Dirt,Dirt)
-  putStrLn (spriteIdentifierForTile (Tile nh (tileIdForNeighborhood nh)))
 
-
-
-  wrenchPlay
-    "tile test"
-    viewportSize
-    "media"
-    colorsWhite
-    0
-    1
-    (const $ Translate (V2 100 100) $ Rotate (Degrees 90 ^. from degrees) $ Sprite "car" RenderPositionCenter)
-    (\_ _ -> 0)
-    (\_ _ -> 0)
--}
