@@ -13,6 +13,7 @@ import           Data.Array              (Array, array,(!))
 import Data.Maybe(mapMaybe)
 import           Data.List               (intercalate, maximumBy, nub,sort)
 import Data.Ord(comparing)
+import Debug.Trace(traceShowId)
 import           Data.Monoid             ((<>))
 import           Linear.V2
 import           Text.Printf             (printf)
@@ -69,7 +70,7 @@ instance Functor BoundedImage where
 
 boundedImageToMaybeGetter :: BoundedImage a -> TileIndex -> Maybe a
 boundedImageToMaybeGetter bi (x,y) =
-  if x < 0 || y < 0 || x >= (bi ^. bounds ^. _1) || y >= (bi ^. bounds ^. _2)
+  if x < 0 || y < 0 || x > (bi ^. bounds ^. _1) || y > (bi ^. bounds ^. _2)
     then Nothing
     else Just $ (bi ^. imageData) (x,y)
 
@@ -180,7 +181,8 @@ tilesToPicture viewport ts tileSize =
       idRightBottom = over each floor ((viewport ^. rectRightBottom) / V2 tileSize tileSize)
       indices = [(x,y) | x <- [(idLeftTop ^. _x)..(idRightBottom ^. _x)],y <- [(idLeftTop ^. _y)..(idRightBottom ^. _y)]]
       positionForIndex (x,y) = V2 (fromIntegral x * tileSize) (fromIntegral y * tileSize) - (viewport ^. rectLeftTop)
-  in Pictures $ mapMaybe (\(x,y) -> ts (x,y) >>= \tile -> return $ Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile tile) RenderPositionTopLeft)) indices
+      validIndices = traceShowId $ concatMap (\ix -> case ts ix of Nothing -> []; Just _ -> [ix]) indices
+  in Pictures $ mapMaybe (\(x,y) -> ts (x,y) >>= \tile -> return $ Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile tile) RenderPositionTopLeft)) validIndices
 
 getRed :: Juicy.PixelRGB8 -> Juicy.Pixel8
 getRed (Juicy.PixelRGB8 r _ _) = r
@@ -198,7 +200,9 @@ main = do
       print tileArray
       let maybeImage = boundedImageToMaybeGetter tileArray
       let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96
-      print picture
+--       case picture of
+--         Pictures xs -> print (length xs)
+--         _ -> print picture
       wrenchPlay
         "window title"
         viewport
