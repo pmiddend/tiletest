@@ -10,6 +10,7 @@ import           Control.Lens.TH         (makeLenses)
 import           Control.Monad           (mapM_)
 import Data.Traversable(traverse)
 import           Data.Array              (Array, array,(!))
+import Data.Maybe(mapMaybe)
 import           Data.List               (intercalate, maximumBy, nub,sort)
 import Data.Ord(comparing)
 import           Data.Monoid             ((<>))
@@ -65,6 +66,12 @@ $(makeLenses ''BoundedImage)
 
 instance Functor BoundedImage where
   fmap f (BoundedImage d b) = BoundedImage (f . d) b
+
+boundedImageToMaybeGetter :: BoundedImage a -> TileIndex -> Maybe a
+boundedImageToMaybeGetter bi (x,y) =
+  if x < 0 || y < 0 || x >= (bi ^. bounds ^. _1) || y >= (bi ^. bounds ^. _2)
+    then Nothing
+    else Just $ (bi ^. imageData) (x,y)
 
 imageValues :: BoundedImage a -> [a]
 imageValues (BoundedImage d b) = [d (x,y) | x <- [0..b ^. _1], y <- [0..b ^. _2]]
@@ -167,13 +174,13 @@ spriteIdentifierForTile t = concatMap shortTileType (sort (t ^.. tileId.each)) <
  - Berechne Positionen der ausgewählten Indizes
  - Gucke ins Array um rauszufinden was fürn Tile das ist
  -}
-tilesToPicture :: Rectangle -> (TileIndex -> Tile) -> FloatType -> Picture
+tilesToPicture :: Rectangle -> (TileIndex -> Maybe Tile) -> FloatType -> Picture
 tilesToPicture viewport ts tileSize =
   let idLeftTop = over each floor ((viewport ^. rectLeftTop) / V2 tileSize tileSize)
       idRightBottom = over each floor ((viewport ^. rectRightBottom) / V2 tileSize tileSize)
       indices = [(x,y) | x <- [(idLeftTop ^. _x)..(idRightBottom ^. _x)],y <- [(idLeftTop ^. _y)..(idRightBottom ^. _y)]]
       positionForIndex (x,y) = V2 (fromIntegral x * tileSize) (fromIntegral y * tileSize) - (viewport ^. rectLeftTop)
-  in Pictures $ map (\(x,y) -> Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile (ts (x,y))) RenderPositionTopLeft)) indices
+  in Pictures $ mapMaybe (\(x,y) -> ts (x,y) >>= \tile -> return $ Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile tile) RenderPositionTopLeft)) indices
 
 getRed :: Juicy.PixelRGB8 -> Juicy.Pixel8
 getRed (Juicy.PixelRGB8 r _ _) = r
@@ -187,9 +194,10 @@ main = do
       let pixelArray = imageToPixelArray omg
       let tileProtoArray = pixelToTileProtoArray pixelArray
       let tileArray = tileProtoToTileArray tileProtoArray
-      let viewport = V2 640 480
+      let viewport = V2 1024 768
       print tileArray
-      let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) (tileArray ^. imageData) 96
+      let maybeImage = boundedImageToMaybeGetter tileArray
+      let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96
       print picture
       wrenchPlay
         "window title"
@@ -198,7 +206,7 @@ main = do
         colorsWhite
         tileArray
         1
-        (\tiles -> tilesToPicture (rectangleFromPoints (V2 0 0) viewport) (tiles ^. imageData) 96)
+        (\tiles -> tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96)
         (\_ w -> w)
         (\_ w -> w)
 
