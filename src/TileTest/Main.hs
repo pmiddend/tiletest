@@ -25,7 +25,7 @@ import           Wrench.Rectangle
 import Control.Applicative
 import Data.Bool.Extras(bool)
 
-data TileType = Grass | Dirt deriving(Eq,Show)
+data TileType = Grass | Dirt deriving(Eq,Show,Ord)
 
 data TileProto = TileProto {
       _tileProtoType  :: TileType
@@ -159,7 +159,7 @@ shortTileType Dirt = "d"
 --type TileSearchFunction = Rectangle -> []
 spriteIdentifierForTile :: Tile -> SpriteIdentifier
 --spriteIdentifierForTile t = map show ((t ^. tileId)^..both)
-spriteIdentifierForTile t = concatMap shortTileType (t ^.. tileId.each) <> "_" <> concatMap shortTileType (t ^.. tileNeighbors. each)
+spriteIdentifierForTile t = concatMap shortTileType (sort (t ^.. tileId.each)) <> "_" <> concatMap shortTileType (t ^.. tileNeighbors. each)
 
 {-
  - Zuweisung einer absoluten Position zu jedem Tile (tileindex_xy*tilesize) (ist ja immer berechenbar, also als Funktion modellieren)
@@ -169,10 +169,10 @@ spriteIdentifierForTile t = concatMap shortTileType (t ^.. tileId.each) <> "_" <
  -}
 tilesToPicture :: Rectangle -> (TileIndex -> Tile) -> FloatType -> Picture
 tilesToPicture viewport ts tileSize =
-  let idLeftTop = over each floor ((viewport ^. rectLeftTop) / (V2 tileSize tileSize))
-      idRightBottom = over each (floor) ((viewport ^. rectRightBottom) / (V2 tileSize tileSize))
+  let idLeftTop = over each floor ((viewport ^. rectLeftTop) / V2 tileSize tileSize)
+      idRightBottom = over each floor ((viewport ^. rectRightBottom) / V2 tileSize tileSize)
       indices = [(x,y) | x <- [(idLeftTop ^. _x)..(idRightBottom ^. _x)],y <- [(idLeftTop ^. _y)..(idRightBottom ^. _y)]]
-      positionForIndex (x,y) = (V2 (fromIntegral x * tileSize) (fromIntegral y * tileSize)) - (viewport ^. rectLeftTop)
+      positionForIndex (x,y) = V2 (fromIntegral x * tileSize) (fromIntegral y * tileSize) - (viewport ^. rectLeftTop)
   in Pictures $ map (\(x,y) -> Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile (ts (x,y))) RenderPositionTopLeft)) indices
 
 getRed :: Juicy.PixelRGB8 -> Juicy.Pixel8
@@ -189,6 +189,8 @@ main = do
       let tileArray = tileProtoToTileArray tileProtoArray
       let viewport = V2 640 480
       print tileArray
+      let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) (tileArray ^. imageData) 96
+      print picture
       wrenchPlay
         "window title"
         viewport
@@ -199,6 +201,4 @@ main = do
         (\tiles -> tilesToPicture (rectangleFromPoints (V2 0 0) viewport) (tiles ^. imageData) 96)
         (\_ w -> w)
         (\_ w -> w)
-     Right _ -> print "oh no"
-
 
