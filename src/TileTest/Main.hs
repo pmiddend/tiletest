@@ -4,7 +4,7 @@ module Main where
 
 import qualified Codec.Picture           as Juicy
 import           Control.Lens            (at, both, each, from, over, toListOf,
-                                          (%~), (&), (^.), (^..), (^?!), _1, _2,_3,_4)
+                                          (%~), (&), (^.), (^..), (^?!), _1, _2,_3,_4,(+~),(-~),(.~))
 import           Control.Lens.At         (ix)
 import           Control.Lens.TH         (makeLenses)
 import           Control.Monad           (mapM_)
@@ -16,14 +16,18 @@ import Data.Ord(comparing)
 import Debug.Trace(traceShowId)
 import           Data.Monoid             ((<>))
 import           Linear.V2
+import           Linear.Vector
 import           Text.Printf             (printf)
 import           TileTest.TrackGenerator
 import           Wrench.Angular
+import           Wrench.Time
 import           Wrench.Color
 import           Wrench.Engine           (Picture (..), RenderPositionMode (..),
-                                          SpriteIdentifier, wrenchPlay)
+                                          SpriteIdentifier, wrenchPlay,Event(..),KeyMovement(..),Keysym(..))
 import           Wrench.FloatType
+import           Wrench.Point
 import           Wrench.Rectangle
+import qualified Wrench.Keycode as KC
 import Control.Applicative
 import Data.Bool.Extras(bool)
 
@@ -68,7 +72,9 @@ $(makeLenses ''BoundedImage)
 instance Functor BoundedImage where
   fmap f (BoundedImage d b) = BoundedImage (f . d) b
 
-boundedImageToMaybeGetter :: BoundedImage a -> TileIndex -> Maybe a
+type MaybeImage a = TileIndex -> Maybe a
+
+boundedImageToMaybeGetter :: BoundedImage a -> MaybeImage a
 boundedImageToMaybeGetter bi (x,y) =
   if x < 0 || y < 0 || x > (bi ^. bounds ^. _1) || y > (bi ^. bounds ^. _2)
     then Nothing
@@ -181,15 +187,42 @@ tilesToPicture viewport ts tileSize =
       idRightBottom = over each floor ((viewport ^. rectRightBottom) / V2 tileSize tileSize)
       indices = [(x,y) | x <- [(idLeftTop ^. _x)..(idRightBottom ^. _x)],y <- [(idLeftTop ^. _y)..(idRightBottom ^. _y)]]
       positionForIndex (x,y) = V2 (fromIntegral x * tileSize) (fromIntegral y * tileSize) - (viewport ^. rectLeftTop)
-      validIndices = traceShowId $ concatMap (\ix -> case ts ix of Nothing -> []; Just _ -> [ix]) indices
-  in Pictures $ mapMaybe (\(x,y) -> ts (x,y) >>= \tile -> return $ Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile tile) RenderPositionTopLeft)) validIndices
+  in Pictures $ mapMaybe (\(x,y) -> ts (x,y) >>= \tile -> return $ Translate (positionForIndex (x,y)) (Sprite (spriteIdentifierForTile tile) RenderPositionTopLeft)) indices
 
 getRed :: Juicy.PixelRGB8 -> Juicy.Pixel8
 getRed (Juicy.PixelRGB8 r _ _) = r
 
+type ViewportMovement = (Int,Int)
+
+data EngineState = EngineState {
+    _esTiles :: MaybeImage Tile
+  , _esViewport :: Rectangle
+  , _esViewportMovement :: Point
+  }
+
+$(makeLenses ''EngineState)
+
+engineStateToPicture :: EngineState -> Picture
+engineStateToPicture es = tilesToPicture (es ^. esViewport) (es ^. esTiles) 96
+
+engineStateEventHandler :: Event -> EngineState -> EngineState
+engineStateEventHandler event state = case event of
+  Keyboard KeyUp _ (Keysym KC.Up _) -> state & (esViewportMovement . _y) .~ 0
+  Keyboard KeyDown _ (Keysym KC.Up _) -> state & (esViewportMovement . _y) .~ (-1)
+  Keyboard KeyUp _ (Keysym KC.Down _) -> state & (esViewportMovement . _y) .~ 0
+  Keyboard KeyDown _ (Keysym KC.Down _) -> state & (esViewportMovement . _y) .~ 1
+  Keyboard KeyUp _ (Keysym KC.Left _) -> state & (esViewportMovement . _x) .~ 0
+  Keyboard KeyDown _ (Keysym KC.Left _) -> state & (esViewportMovement . _x) .~ (-1)
+  Keyboard KeyUp _ (Keysym KC.Right _) -> state & (esViewportMovement . _x) .~ 0
+  Keyboard KeyDown _ (Keysym KC.Right _) -> state & (esViewportMovement . _x) .~ 1
+  _ -> state
+
+engineStateTickHandler :: TimeDelta -> EngineState -> EngineState
+engineStateTickHandler td state = state & (esViewport . rectLeftTop) +~ traceShowId (100 * toSeconds td *^ (state ^. esViewportMovement))
+
 main :: IO ()
 main = do
-  imageReadResult <- Juicy.readImage "media/track2.png"
+  imageReadResult <- Juicy.readImage "media/bigmap.png"
   case imageReadResult of
      Left errmsg -> error errmsg
      Right (Juicy.ImageRGB8 omg) -> do
@@ -197,9 +230,9 @@ main = do
       let tileProtoArray = pixelToTileProtoArray pixelArray
       let tileArray = tileProtoToTileArray tileProtoArray
       let viewport = V2 1024 768
-      print tileArray
+--       print tileArray
       let maybeImage = boundedImageToMaybeGetter tileArray
-      let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96
+--       let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96
 --       case picture of
 --         Pictures xs -> print (length xs)
 --         _ -> print picture
@@ -208,9 +241,10 @@ main = do
         viewport
         "media"
         colorsWhite
-        tileArray
-        1
-        (\tiles -> tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96)
-        (\_ w -> w)
-        (\_ w -> w)
+        (EngineState maybeImage (rectangleFromPoints (V2 0 0) viewport) (V2 0 0))
+        30
+        engineStateToPicture
+        engineStateEventHandler
+        engineStateTickHandler
+     Right _ -> error "invalid image format"
 
