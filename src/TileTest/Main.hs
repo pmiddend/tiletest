@@ -3,33 +3,37 @@
 module Main where
 
 import qualified Codec.Picture           as Juicy
+import           Control.Applicative
 import           Control.Lens            (at, both, each, from, over, toListOf,
-                                          (%~), (&), (^.), (^..), (^?!), _1, _2,_3,_4,(+~),(-~),(.~))
+                                          (%~), (&), (+~), (-~), (.~), (^.),
+                                          (^..), (^?!), _1, _2, _3, _4)
 import           Control.Lens.At         (ix)
 import           Control.Lens.TH         (makeLenses)
 import           Control.Monad           (mapM_)
-import Data.Traversable(traverse)
-import           Data.Array              (Array, array,(!))
-import Data.Maybe(mapMaybe)
-import           Data.List               (intercalate, maximumBy, nub,sort)
-import Data.Ord(comparing)
-import Debug.Trace(traceShowId)
+import           Data.Array              (Array, array, (!))
+import           Data.Bool.Extras        (bool)
+import           Data.List               (intercalate, maximumBy, nub, sort)
+import           Data.Maybe              (mapMaybe)
 import           Data.Monoid             ((<>))
+import           Data.Ord                (comparing)
+import           Data.Traversable        (traverse)
+import           Debug.Trace             (traceShowId)
 import           Linear.V2
 import           Linear.Vector
 import           Text.Printf             (printf)
 import           TileTest.TrackGenerator
 import           Wrench.Angular
-import           Wrench.Time
 import           Wrench.Color
-import           Wrench.Engine           (Picture (..), RenderPositionMode (..),
-                                          SpriteIdentifier, wrenchPlay,Event(..),KeyMovement(..),Keysym(..))
+import           Wrench.Engine           (Event (..), KeyMovement (..),
+                                          Keysym (..), Picture (..),
+                                          RenderPositionMode (..),
+                                          SpriteIdentifier, ViewportSize,
+                                          wrenchPlay)
 import           Wrench.FloatType
+import qualified Wrench.Keycode          as KC
 import           Wrench.Point
 import           Wrench.Rectangle
-import qualified Wrench.Keycode as KC
-import Control.Applicative
-import Data.Bool.Extras(bool)
+import           Wrench.Time
 
 data TileType = Grass | Dirt deriving(Eq,Show,Ord)
 
@@ -195,15 +199,15 @@ getRed (Juicy.PixelRGB8 r _ _) = r
 type ViewportMovement = (Int,Int)
 
 data EngineState = EngineState {
-    _esTiles :: MaybeImage Tile
-  , _esViewport :: Rectangle
+    _esTiles            :: MaybeImage Tile
+  , _esViewportPos      :: Point
   , _esViewportMovement :: Point
   }
 
 $(makeLenses ''EngineState)
 
-engineStateToPicture :: EngineState -> Picture
-engineStateToPicture es = tilesToPicture (es ^. esViewport) (es ^. esTiles) 96
+engineStateToPicture :: ViewportSize -> EngineState -> Picture
+engineStateToPicture vs es = tilesToPicture (rectangleFromPoints (es ^. esViewportPos) (es ^. esViewportPos + vs)) (es ^. esTiles) 96
 
 engineStateEventHandler :: Event -> EngineState -> EngineState
 engineStateEventHandler event state = case event of
@@ -218,7 +222,7 @@ engineStateEventHandler event state = case event of
   _ -> state
 
 engineStateTickHandler :: TimeDelta -> EngineState -> EngineState
-engineStateTickHandler td state = state & (esViewport . rectLeftTop) +~ traceShowId (100 * toSeconds td *^ (state ^. esViewportMovement))
+engineStateTickHandler td state = state & esViewportPos +~ traceShowId (100 * toSeconds td *^ (state ^. esViewportMovement))
 
 main :: IO ()
 main = do
@@ -229,7 +233,6 @@ main = do
       let pixelArray = imageToPixelArray omg
       let tileProtoArray = pixelToTileProtoArray pixelArray
       let tileArray = tileProtoToTileArray tileProtoArray
-      let viewport = V2 1024 768
 --       print tileArray
       let maybeImage = boundedImageToMaybeGetter tileArray
 --       let picture = tilesToPicture (rectangleFromPoints (V2 0 0) viewport) maybeImage 96
@@ -238,13 +241,11 @@ main = do
 --         _ -> print picture
       wrenchPlay
         "window title"
-        viewport
         "media"
         colorsWhite
-        (EngineState maybeImage (rectangleFromPoints (V2 0 0) viewport) (V2 0 0))
+        (EngineState maybeImage (V2 0 0) (V2 0 0))
         30
         engineStateToPicture
         engineStateEventHandler
         engineStateTickHandler
      Right _ -> error "invalid image format"
-
