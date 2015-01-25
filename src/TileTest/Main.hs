@@ -3,27 +3,18 @@
 module Main where
 
 import qualified Codec.Picture           as Juicy
-import           Control.Applicative
-import           Control.Lens            (at, both, each, from, over, toListOf,
-                                          (%~), (&), (+~), (-~), (.~), (^.),
-                                          (^..), (^?!), _1, _2, _3, _4)
-import           Control.Lens.At         (ix)
+import           Control.Lens            (each, over,
+                                          (%~), (&), (+~), (.~), (^.),
+                                          (^..), _1, _2, _3, _4)
 import           Control.Lens.TH         (makeLenses)
-import           Control.Monad           (mapM_)
-import           Data.Array              (Array, array, (!))
 import           Data.Bool.Extras        (bool)
-import           Data.List               (intercalate, maximumBy, nub, sort)
+import           Data.List               (nub, sort)
 import           Data.Maybe              (mapMaybe)
 import           Data.Monoid             ((<>))
-import           Data.Ord                (comparing)
-import           Data.Traversable        (traverse)
 import           Debug.Trace             (traceShowId)
 import           Linear.V2
 import           Linear.Vector
 import           Text.Printf             (printf)
-import           TileTest.TrackGenerator
-import           Wrench.Angular
-import           Wrench.Color
 import           Wrench.Engine           (Event (..), KeyMovement (..),
                                           Keysym (..), Picture (..),
                                           RenderPositionMode (..),
@@ -165,8 +156,6 @@ pixelToTileProto (Juicy.PixelRGB8 82 73 32) = TileProto Dirt False
 pixelToTileProto (Juicy.PixelRGB8 82 73 107) = TileProto Dirt True
 pixelToTileProto (Juicy.PixelRGB8{}) = TileProto Grass False
 
-viewportSize = V2 640 480
-
 -- testArray = array ((0,0),(3,3)) [((x,y),True) | x <- [0..3],y <- [0..3]]
 -- testArray = array ((0,0),(3,3)) [((x,y),True) | x <- [0..3],y <- [0]]
 
@@ -242,7 +231,7 @@ main = do
       wrenchPlay
         "window title"
         "media"
-        colorsWhite
+        Nothing
         (EngineState maybeImage (V2 0 0) (V2 0 0))
         30
         engineStateToPicture

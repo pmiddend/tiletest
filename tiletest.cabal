@@ -33,3 +33,23 @@ executable tiletest
                      , bool-extras
   -- hs-source-dirs:
   default-language:    Haskell2010
+
+executable carmain
+  main-is:             TileTest/CarMain.hs
+  -- other-modules:       
+  -- other-extensions:
+  hs-source-dirs: src
+  build-depends:       base >=4.7 && <4.8
+                     , wrench
+                     , lens
+                     , linear
+                     , JuicyPixels
+                     , vector
+                     , comonad
+                     , array
+                     , random
+                     , containers
+                     , bool-extras
+                     , data-default
+  -- hs-source-dirs:
+  default-language:    Haskell2010
